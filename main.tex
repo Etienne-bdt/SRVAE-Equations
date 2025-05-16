@@ -1,8 +1,95 @@
 \documentclass{article}
 \usepackage{graphicx} % Required for inserting images
+\usepackage{amsmath}
+\title{SRVAE math}
+\author{Etienne Bardet}
+\date{May 2025}
 
 \begin{document}
 
+\maketitle
+
 \section{Introduction}
 
+\section{Equation}
+
+Nous voulons maximiser $p(x)$ sachant les variables latentes $u,z$ et $y$.
+La formulation de la log probabilité est la suivante :
+\begin{equation}
+    p(x) = E_{q(w)}[\frac{p(x,w)}{q(w)}]
+\end{equation}
+
+Commençons par réexprimer la loi jointe :
+\begin{equation}
+    p(x,w) = p(x|y,u,z)p(z|y,u)p(y|u)p(u)
+\end{equation}
+
+Nous pouvons négliger la dépendance en u pour x car les informations sont redondantes avec y.
+Nous avons également : 
+\begin{equation}
+     q(w|x) = q(z|y,x,u)q(u|x,y)q(y|x)
+\end{equation}
+
+Or il n'y a aucun apport d'information de x sur u sachant x,y. Nous considérons également la transition $y|x$ comme déterministe.
+Ainsi, nous avons : 
+\begin{equation}
+    q(w|x) \approx q(z|y,x)q(u|y)q(y|x)
+\end{equation}
+
+On a  donc l'elbo suivant :
+\begin{multline}
+    log(p(x)) \geq E_{q(z|y,x)}(log(p(x|y,z))) + E_{q(z|y,x)q(u|y)}(log(p(z|y,u))) \\+ E_{q(u|y)}(log(p(y|u))) + E_{q(u|y)}(log(p(u))) - E_{q(z|y,x)q(u|y)}(log(q(z|y,x)))\\ - E_{q(u|y)}(log(q(u|y)))
+\end{multline}
+
+On peut regrouper les termes suivants :
+\begin{multline}    
+    E_{q(z|y,x)q(u|y)}(log(p(z|y,u))) - E_{q(z|y,x)q(u|y)}(log(q(z|y,x)))\\ = E_{q(u|y)}[q(z|y,x)log(\frac{p(z|y,u)}{q(z|y,x)})]\\ = - E_{q(u|y)}[q(z|y,x)log(\frac{q(z|y,x)}{p(z|y,u)}) ] 
+\end{multline}
+
+On retrouve donc une divergence de Kullback-Leibler :
+\begin{equation}
+     - E_{q(u|y)}[q(z|y,x)log(\frac{q(z|y,x)}{p(z|y,u)}) = - E_{q(u|y)}(\mathcal{KL}(q(z|y,x)||p(z|y,u)))
+\end{equation}
+Ici on peut simplifier la dépendance en y pour z car on considère que y n'apporte pas plus d'information que x, d'où :
+\begin{equation}
+     - \mathcal{KL}(q(z|y,x)||p(z|y,u)) \approx - \mathcal{KL}(q(z|x)||p(z|y,u))
+\end{equation}
+
+De même on a :
+\begin{multline}
+    - E_{q(u|y)q(y|x)}(log(q(u|y))) + E_{q(u|y)q(y|x)}(log(p(u))) = \\-  E_{q(y|x)}(q(u|y)log(\frac{q(u|y)}{p(u)}) = - E_{q(y|x)}(\mathcal{KL}(q(u|y)||p(u)))
+\end{multline}
+Il reste donc :
+\begin{multline}
+    ELBO = E_{q(z|y,x)}(log(p(x|y,z))) + E_{q(u|y)}(log(p(y|u))) - \mathcal{KL}(q(u|y)||p(u))  - \mathcal{KL}(q(z|x)||p(z|y,u))
+\end{multline}
+
+Notons d'ailleurs qu'avec un décodeur Gaussien :
+\begin{align}
+    p(x|y,z) = \mathcal{N}(\hat{x}, \gamma_1^2) && p(y|u) = \mathcal{N}(\hat{y}, \gamma_2^2)
+\end{align}
+Pour les décodeurs, nous avons donc en log :
+\begin{equation}
+    log(p(x|y,z) = -log((2\pi)^{\frac{k}{2}} \gamma^{k}) + -\frac{||x-\hat{x}||^2_2}{2\gamma^2} \propto - k * log(\gamma) - \frac{||x-\hat{x}||^2_2}{2\gamma^2}
+\end{equation}
+On a donc :
+\begin{multline}
+    ELBO = - (k * log(\gamma_1) + E_{q(z|y,x)}(\frac{||x-\hat{x}||^2_2}{2\gamma^2_1})) - (k * log(\gamma_2) + E_{q(u|y)}(\frac{||y-\hat{y}||^2_2}{2\gamma^2_2})) \\ - E(\mathcal{KL}(q(u|y)||p(u)))  - E(\mathcal{KL}(q(z|x)||p(z|y,u)))
+\end{multline}
+
+Nous optimisons donc la loss suivante (négative Elbo) :
+\begin{multline}
+    -ELBO = k*log(\gamma_1) + E_{q(z|y,x)}(\frac{||x-\hat{x}||^2_2}{2\gamma^2_1})) + k * log(\gamma_2) + E_{q(u|y)}(\frac{||y-\hat{y}||^2_2}{2\gamma^2_2})) \\+ E_{q(y|x)}(\mathcal{KL}(q(u|y)||p(u))) + E_{q(u|y)}(\mathcal{KL}(q(z|x)||p(z|y,u)))
+\end{multline}
+
+Soit en posant :
+\begin{equation}
+    MSE(x,\hat{x}) = \frac{1}{N}\sum_{n=1}^N (x_n-\hat{x}_n)
+\end{equation}
+
+On obtient finalement :
+\begin{multline}
+    -ELBO = k*log(\gamma_1)  + \frac{k}{2\gamma_1}*MSE(x,\hat{x}) + k*log(\gamma_2) + \frac{k}{2\gamma_2}*MSE(y,\hat{y}) \\+ E_{q(y|x)}(\mathcal{KL}(q(u|y)||p(u))) + E_{q(u|y)}(\mathcal{KL}(q(z|x)||p(z|y,u)))
+\end{multline}
+Avec k, la dimension des données.
 \end{document}
