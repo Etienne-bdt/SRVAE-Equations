@@ -10,11 +10,34 @@
 \maketitle
 
 \section{Introduction}
+Ce document a pour but de détailler les calculs formulant la loss d'un VAE dans un premier temps puis d'un VAE Conditionnel ("à deux étages") dans un second temps.
 
-\section{Equation}
+\section{VAE}
+\subsection{Évidence}
+Dans un VAE, nous cherchons à maximiser l'évidence, qui est la probabilité de retrouver notre données, conditionné sur les paramètres du modèle, soit :
+\begin{equation*}
+    p(x|\theta) = \int p(x|z,\theta) p(z,\theta)dz
+\end{equation*}
+
+\subsection{Encodeur}
+
+Cependant, pour estimer $p(x|z,\theta)$, il nous faut connaitre $p(z|x,\theta)$ pour utiliser le théorème de Bayes.
+
+Nous allons approcher cette distribution par un réseau de neurones qui fournira $q_{\phi}(z|x)$.
+Nous supposons ici que la distribution des données de l'espace latent est gaussienne, soit :
+\begin{equation*}
+    q_{\phi}(z|x) \hookrightarrow \mathcal{N}(\mu_{\phi}, \Sigma_{\phi})
+\end{equation*}
+Avec $\Sigma_\phi$ une matrice de covariance diagonale (les $l$ coefficients de sa diagonale étant $l$ sorties de l'encodeur). $\mu_\phi$ étant une autre sortie de l'encodeur, de même taille.
+
+
+
+
+
+\section{VAE Conditionnel}
 
 Nous voulons maximiser $p(x)$ sachant les variables latentes $u,z$ et $y$.
-La formulation de la log probabilité est la suivante :
+La formulation de la log-probabilité est la suivante :
 \begin{equation}
     p(x) = E_{q(w)}[\frac{p(x,w)}{q(w)}]
 \end{equation}
@@ -38,17 +61,17 @@ Ainsi, nous avons :
 
 On a  donc l'elbo suivant :
 \begin{multline}
-    log(p(x)) \geq E_{q(z|y,x)}(log(p(x|y,z))) + E_{q(z|y,x)q(u|y)}(log(p(z|y,u))) \\+ E_{q(u|y)}(log(p(y|u))) + E_{q(u|y)}(log(p(u))) - E_{q(z|y,x)q(u|y)}(log(q(z|y,x)))\\ - E_{q(u|y)}(log(q(u|y)))
+    \log(p(x)) \geq E_{q(z|y,x)}(\log(p(x|y,z))) + E_{q(z|y,x)q(u|y)}(\log(p(z|y,u))) \\+ E_{q(u|y)}(\log(p(y|u))) + E_{q(u|y)}(\log(p(u))) - E_{q(z|y,x)q(u|y)}(\log(q(z|y,x)))\\ - E_{q(u|y)}(\log(q(u|y)))
 \end{multline}
 
 On peut regrouper les termes suivants :
 \begin{multline}    
-    E_{q(z|y,x)q(u|y)}(log(p(z|y,u))) - E_{q(z|y,x)q(u|y)}(log(q(z|y,x)))\\ = E_{q(u|y)}[q(z|y,x)log(\frac{p(z|y,u)}{q(z|y,x)})]\\ = - E_{q(u|y)}[q(z|y,x)log(\frac{q(z|y,x)}{p(z|y,u)}) ] 
+    E_{q(z|y,x)q(u|y)}(\log(p(z|y,u))) - E_{q(z|y,x)q(u|y)}(\log(q(z|y,x)))\\ = E_{q(u|y)}[q(z|y,x)\log(\frac{p(z|y,u)}{q(z|y,x)})]\\ = - E_{q(u|y)}[q(z|y,x)\log(\frac{q(z|y,x)}{p(z|y,u)}) ] 
 \end{multline}
 
 On retrouve donc une divergence de Kullback-Leibler :
 \begin{equation}
-     - E_{q(u|y)}[q(z|y,x)log(\frac{q(z|y,x)}{p(z|y,u)}) = - E_{q(u|y)}(\mathcal{KL}(q(z|y,x)||p(z|y,u)))
+     - E_{q(u|y)}[q(z|y,x)\log(\frac{q(z|y,x)}{p(z|y,u)}) = - E_{q(u|y)}(\mathcal{KL}(q(z|y,x)||p(z|y,u)))
 \end{equation}
 Ici on peut simplifier la dépendance en y pour z car on considère que y n'apporte pas plus d'information que x, d'où :
 \begin{equation}
@@ -57,11 +80,11 @@ Ici on peut simplifier la dépendance en y pour z car on considère que y n'appo
 
 De même on a :
 \begin{multline}
-    - E_{q(u|y)q(y|x)}(log(q(u|y))) + E_{q(u|y)q(y|x)}(log(p(u))) = \\-  E_{q(y|x)}(q(u|y)log(\frac{q(u|y)}{p(u)}) = - E_{q(y|x)}(\mathcal{KL}(q(u|y)||p(u)))
+    - E_{q(u|y)q(y|x)}(\log(q(u|y))) + E_{q(u|y)q(y|x)}(\log(p(u))) = \\-  E_{q(y|x)}(q(u|y)\log(\frac{q(u|y)}{p(u)}) = - E_{q(y|x)}(\mathcal{KL}(q(u|y)||p(u)))
 \end{multline}
 Il reste donc :
 \begin{multline}
-    ELBO = E_{q(z|y,x)}(log(p(x|y,z))) + E_{q(u|y)}(log(p(y|u))) - \mathcal{KL}(q(u|y)||p(u))  - \mathcal{KL}(q(z|x)||p(z|y,u))
+    ELBO = E_{q(z|y,x)}(\log(p(x|y,z))) + E_{q(u|y)}(\log(p(y|u))) - \mathcal{KL}(q(u|y)||p(u))  - \mathcal{KL}(q(z|x)||p(z|y,u))
 \end{multline}
 
 Notons d'ailleurs qu'avec un décodeur Gaussien :
@@ -70,16 +93,16 @@ Notons d'ailleurs qu'avec un décodeur Gaussien :
 \end{align}
 Pour les décodeurs, nous avons donc en log :
 \begin{equation}
-    log(p(x|y,z) = -log((2\pi)^{\frac{k}{2}} \gamma^{k}) + -\frac{||x-\hat{x}||^2_2}{2\gamma^2} \propto - k * log(\gamma) - \frac{||x-\hat{x}||^2_2}{2\gamma^2}
+    \log(p(x|y,z) = -\log((2\pi)^{\frac{k}{2}} \gamma^{k}) + -\frac{||x-\hat{x}||^2_2}{2\gamma^2} \propto - k * \log(\gamma) - \frac{||x-\hat{x}||^2_2}{2\gamma^2}
 \end{equation}
 On a donc :
 \begin{multline}
-    ELBO = - (k * log(\gamma_1) + E_{q(z|y,x)}(\frac{||x-\hat{x}||^2_2}{2\gamma^2_1})) - (k * log(\gamma_2) + E_{q(u|y)}(\frac{||y-\hat{y}||^2_2}{2\gamma^2_2})) \\ - E(\mathcal{KL}(q(u|y)||p(u)))  - E(\mathcal{KL}(q(z|x)||p(z|y,u)))
+    ELBO = - (k * \log(\gamma_1) + E_{q(z|y,x)}(\frac{||x-\hat{x}||^2_2}{2\gamma^2_1})) - (k * \log(\gamma_2) + E_{q(u|y)}(\frac{||y-\hat{y}||^2_2}{2\gamma^2_2})) \\ - E(\mathcal{KL}(q(u|y)||p(u)))  - E(\mathcal{KL}(q(z|x)||p(z|y,u)))
 \end{multline}
 
 Nous optimisons donc la loss suivante (négative Elbo) :
 \begin{multline}
-    -ELBO = k*log(\gamma_1) + E_{q(z|y,x)}(\frac{||x-\hat{x}||^2_2}{2\gamma^2_1})) + k * log(\gamma_2) + E_{q(u|y)}(\frac{||y-\hat{y}||^2_2}{2\gamma^2_2})) \\+ E_{q(y|x)}(\mathcal{KL}(q(u|y)||p(u))) + E_{q(u|y)}(\mathcal{KL}(q(z|x)||p(z|y,u)))
+    -ELBO = k*\log(\gamma_1) + E_{q(z|y,x)}(\frac{||x-\hat{x}||^2_2}{2\gamma^2_1})) + k * \log(\gamma_2) + E_{q(u|y)}(\frac{||y-\hat{y}||^2_2}{2\gamma^2_2})) \\+ E_{q(y|x)}(\mathcal{KL}(q(u|y)||p(u))) + E_{q(u|y)}(\mathcal{KL}(q(z|x)||p(z|y,u)))
 \end{multline}
 
 Soit en posant :
@@ -89,7 +112,20 @@ Soit en posant :
 
 On obtient finalement :
 \begin{multline}
-    -ELBO = k*log(\gamma_1)  + \frac{k}{2\gamma_1}*MSE(x,\hat{x}) + k*log(\gamma_2) + \frac{k}{2\gamma_2}*MSE(y,\hat{y}) \\+ E_{q(y|x)}(\mathcal{KL}(q(u|y)||p(u))) + E_{q(u|y)}(\mathcal{KL}(q(z|x)||p(z|y,u)))
+    -ELBO = k*\log(\gamma_1)  + \frac{k}{2\gamma_1}*MSE(x,\hat{x}) + k*\log(\gamma_2) + \frac{k}{2\gamma_2}*MSE(y,\hat{y}) \\+ E_{q(y|x)}(\mathcal{KL}(q(u|y)||p(u))) + E_{q(u|y)}(\mathcal{KL}(q(z|x)||p(z|y,u)))
 \end{multline}
 Avec k, la dimension des données.
+
+\section{MoG}
+
+Admettons maintenant un mélange de gaussiennes :
+\begin{equation}
+    p(u) = MoG(w, \mu, \sigma) = \sum_{i=1}^{Comp} w_i \mathcal{N}(\mu_i,\sigma_i^2)
+\end{equation}
+
+Nous ne changeons qu'une chose : le prior de u.
+Qu'est ce que cela traduit pour l'ELBO ? 
+Nous pouvons borner $\mathcal{KL}(p||\sum_i w_i q_i) \leq \sum_i w_i \mathcal{KL}(p||q_i)$. Ainsi, nous avons donc une borne inf de l'ELBO qui est une borne inf de $p(x)$.
+
 \end{document}
+
