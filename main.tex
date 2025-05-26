@@ -1,6 +1,7 @@
 \documentclass{article}
 \usepackage{graphicx} % Required for inserting images
 \usepackage{amsmath}
+\usepackage{amssymb}
 \title{SRVAE math}
 \author{Etienne Bardet}
 \date{May 2025}
@@ -16,12 +17,12 @@ Ce document a pour but de détailler les calculs formulant la loss d'un VAE dans
 \subsection{Évidence}
 Dans un VAE, nous cherchons à maximiser l'évidence, qui est la probabilité de retrouver notre données, conditionné sur les paramètres du modèle, soit :
 \begin{equation*}
-    p(x|\theta) = \int p(x|z,\theta) p(z,\theta)dz
+    p(x) = \int p(x|z) p(z)dz
 \end{equation*}
 
 \subsection{Encodeur}
 
-Cependant, pour estimer $p(x|z,\theta)$, il nous faut connaitre $p(z|x,\theta)$ pour utiliser le théorème de Bayes.
+Cependant, pour estimer $p(x|z)$, il nous faut connaitre $p(z|x)$ pour utiliser le théorème de Bayes.
 
 Nous allons approcher cette distribution par un réseau de neurones qui fournira $q_{\phi}(z|x)$.
 Nous supposons ici que la distribution des données de l'espace latent est gaussienne, soit :
@@ -30,16 +31,89 @@ Nous supposons ici que la distribution des données de l'espace latent est gauss
 \end{equation*}
 Avec $\Sigma_\phi$ une matrice de covariance diagonale (les $l$ coefficients de sa diagonale étant $l$ sorties de l'encodeur). $\mu_\phi$ étant une autre sortie de l'encodeur, de même taille.
 
+\subsection{ELBO}
 
+Reformulons la formule de l'évidence :
+\begin{equation*}
+    p(x) = \int \frac{p(x,z)}{q_\phi(z|x)}q_\phi(z|x)dz
+\end{equation*}
 
+Le théorème du transfert nous permet d'obtenir l'égalité suivante
+\begin{equation}
+    p(x) = \mathbb{E}_{q_\phi(z|x)}[\frac{p(x,z)}{q_\phi(z|x)}]
+\end{equation}
 
+En passant, au log, nous avons 
+\begin{equation*}
+    \log(p(x)) = \log(\mathbb{E}_{q_\phi(z|x)}[\frac{p(x,z)}{q_\phi(z|x)}])
+\end{equation*}
+
+Par concavité du logarithme, nous pouvons utiliser l'inégalité de Jensen, qui nous permet de borner la log-évidence
+
+\begin{equation}
+    \log(p(x)) \geq \mathbb{E}_{q_\phi(z|x)}[\log(\frac{p(x,z)}{q_\phi(z|x)})] = \mathbb{E}_{q_\phi(z|x)}[\log(p(x,z)) - \log(q_\phi(z|x))] 
+\end{equation}
+
+\subsubsection{$p(x,z)$}
+
+La formule d'une probabilité conditionnelle, nous donne pour $p(x,z)$
+\begin{equation*}
+    \log(p(x,z)) = \log(p(x|z)) + \log(p(z))
+\end{equation*}
+
+\subsubsection{Attache aux données}
+
+Nous pouvons développer un terme d'attache aux données dans $\log(p(x|z))$
+En effet, en partant sur le principe que notre décodeur est Gaussien, nous avons donc la loi suivante pour $p(x|z)$
+
+\begin{equation*}
+    p(x|z) \hookrightarrow \mathcal{N}(\hat{x}, \gamma^2\mathbb{I})
+\end{equation*}
+
+En utilisant la formule d'une distribution Gaussienne multivariée, nous pouvons donc développer le terme d'attache aux données comme suit 
+\begin{equation*}
+    \log(p(x|z)) = -\frac{(x-\hat{x})^2}{2\gamma^2} - \log((2\pi)^{\frac{k}{2}} |\gamma^2\mathbb{I}|) 
+\end{equation*}
+Nous ne pouvons pas jouer sur le terme d'échelle de la Gaussienne : $\frac{k}{2}\log(2\pi)$, nous allons donc utiliser la proportionnalité pour exprimer 
+\begin{equation}
+    \log(p(x|z)) \propto -\frac{(x-\hat{x})^2}{2\gamma^2} - k\log(\gamma) 
+\end{equation}
+
+À noter qu'ici, nous décidons de paramétrer la variance du décodeur par un paramètre $\gamma$ qui est appris durant l'entrainement.
+
+\emph{Note :} $k$ ici est une constante qui représente la dimension de $x$.
+
+\subsubsection{Reste de l'ELBO}
+
+Continuons par développer le reste de l'elbo dans notre équation.
+Il nous reste donc à développer les termes suivants : 
+
+\begin{equation*}
+    \mathbb{E}_{q_\phi(z|x)}[\log(p(z)) - \log(q_\phi(z|x))]
+\end{equation*}
+
+Ces deux termes peuvent se regrouper pour donner notamment 
+\begin{equation*}
+    - \mathbb{E}_{q_\phi(z|x)}[\log(\frac{q_\phi(z|x)}{p(z)})] = - \int q_\phi(z|x)\log(\frac{q_\phi(z|x)}{p(z)}) = - \mathcal{KL}(q_\phi(z|x)||p(z))
+\end{equation*}
+
+Notre ELBO peut donc s'écrire finalement de la façon suivante (on écrit le $-ELBO$ car nous allons l'optimiser en minimisant :
+
+\begin{equation}
+    - ELBO = \frac{(x-\hat{x})^2}{2\gamma^2} + k\log(\gamma) + \mathcal{KL}(q_\phi(z|x)||p(z))
+\end{equation}
 
 \section{VAE Conditionnel}
 
-Nous voulons maximiser $p(x)$ sachant les variables latentes $u,z$ et $y$.
-La formulation de la log-probabilité est la suivante :
+De la même manière que dans la section précédente, nous voulons maximiser $p(x)$ Commencons par poser $w = [u,z,y]$.
+Nous avons alors 
 \begin{equation}
-    p(x) = E_{q(w)}[\frac{p(x,w)}{q(w)}]
+    p(x) = \int p(x,w)dw = \int \frac{p(x,w)}{q(w|x)}q(w|x)dw
+\end{equation}
+
+Le théorème du transfert donne alors 
+\begin{equation}
+    p(x) = \mathbb{E}_{q(w|x)}[\frac{p(x,w)}{q(w|x)}]
 \end{equation}
 
 Commençons par réexprimer la loi jointe :
