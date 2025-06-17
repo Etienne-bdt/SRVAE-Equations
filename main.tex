@@ -188,7 +188,7 @@ Utilisant les simplifications de \ref{simp}, nous pouvons donc supprimer les dé
 En passant cette équation au log, nous pouvons donc exprimer l'évidence de la façon suivante, commençons par l'évidence :
 
 \begin{equation*}
-    p(x) = \mathbb{E}_{q(z|x)q(u|y)q(y|x)}\left[\frac{p(x|u,x,y)p(z|y,u)p(y|u)p(u)}{q(z|x)q(u|y)q(y|x)}\right]
+    p(x) = \mathbb{E}_{q(z|x)q(u|y)q(y|x)}\left[\frac{p(x|u,z,y)p(z|y,u)p(y|u)p(u)}{q(z|x)q(u|y)q(y|x)}\right]
 \end{equation*}
 
 En utilisant la formule de Jensen pour décomposer le terme de droite, nous pouvons obtenir l'inégalité suivante :
