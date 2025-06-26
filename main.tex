@@ -7,7 +7,9 @@
 \author{Etienne Bardet}
 \date{May 2025}
 \usepackage[backend=biber]{biblatex}
-\addbibresource{refs.bib}
+\addbibresource{ref.bib} % This is the name of your .bib file
+
+
 \begin{document}
 
 \maketitle
@@ -106,7 +108,7 @@ Notre ELBO peut donc s'écrire finalement de la façon suivante (on écrit le $-
     - ELBO = \frac{(x-\hat{x})^2}{2\gamma^2} + k\log(\gamma) + \mathcal{KL}(q_\phi(z|x)||p(z))
 \end{equation}
 
-\section{VAE Conditionnel}
+\section{VAE Conditionnel}\label{srvae}
 
 Dans cette section, nous allons explorer une nouvelle branche qui consiste à utiliser l'information d'une nouvelle image qui est liée d'une façon ou d'une autre à l'image d'origine pour conditionner notre modèle dessus.
 \subsection{Dépendances}
@@ -221,19 +223,25 @@ Cette partie est la plus simple car elle s'apparente le plus au VAE classique. E
 
 Développant cela, nous pouvons développer le terme $\mathcal{L}_y$ de la façon suivante
 \begin{equation*}
-    \mathcal{L}_y = \mathbb{E}_{q(z|y,x)}\left[-\frac{||y-\hat{y}||^2_2}{2\gamma_y^2} - N_y\log(\gamma_y) - \frac{N_y}{2}\log(2\pi) \right]  
+    \mathcal{L}_y = \mathbb{E}_{q(y|u)}\left[-\frac{||y-\hat{y}||^2_2}{2\gamma_y^2} - N_y\log(\gamma_y) - \frac{N_y}{2}\log(2\pi) \right]  
 \end{equation*}
 
 Puisque nous ne pouvons pas optimiser le terme en $2\pi$, nous allons donc utiliser la proportionnalité pour optimiser le terme suivant :
 \begin{equation}
-    \mathcal{L}_y \propto -\mathbb{E}_{q(z|y,x)}\left[\frac{||y-\hat{y}||^2_2}{2\gamma_y^2}\right]  - N_y\log(\gamma_y)
+    \mathcal{L}_y \propto -\mathbb{E}_{q(y|u)}\left[\frac{||y-\hat{y}||^2_2}{2\gamma_y^2}  + N_y\log(\gamma_y)\right]
 \end{equation}
 
 Cette espérance, ici, se calcule de façon empirique, nous obtenons alors les termes suivants :
 
 \begin{equation*}
-    \mathcal{L}_y \propto - \frac{N_y}{2 \gamma_y^2N_y}\sum_{i=1}^n(y_i-\hat{y}_i)^2   - N_y\log(\gamma_y) = -N_y \left[\frac{MSE(y,\hat{y})}{2\gamma_y^2} + log(\gamma_y)\right]
+    \mathcal{L}_y \propto -\mathbb{E}_{q(y|u)}\left[\frac{N_y}{2 \gamma_y^2N_y}\sum_{i=1}^n(y_i-\hat{y}_i)^2   + N_y\log(\gamma_y)\right]
 \end{equation*}
+
+Après factorisation, nous obtenons donc la formule suivante :
+
+\begin{equation}
+    \mathcal{L}_y \propto-N_y*\mathbb{E}_{q(y|u)}\left[\frac{MSE(y,\hat{y})}{2\gamma_y^2} + log(\gamma_y)\right]
+\end{equation}
 
 \subsubsection{Attache à x}
 
@@ -245,7 +253,12 @@ De la même façon que dans la sous-section précédente, nous pouvons développ
 
 Cela nous donne alors :
 \begin{equation*}
-    \mathcal{L}_x \propto - \frac{N_x}{2 \gamma_x^2N_x}\sum_{i=1}^n(x_i-\hat{x}_i)^2   - N_x\log(\gamma_x) = -N_x \left[\frac{MSE(x,\hat{x})}{2\gamma_x^2} + log(\gamma_x)\right]
+    \mathcal{L}_x \propto \mathbb{E}_{q(z|y,x)}\left[-\frac{N_x}{2 \gamma_x^2N_x}\sum_{i=1}^n(x_i-\hat{x}_i)^2   - N_x\log(\gamma_x)\right]
+\end{equation*}
+
+Qui donne donc :
+\begin{equation*}
+    \mathcal{L}_x \propto -N_x*\mathbb{E}_{q(z|y,x)}\left[\frac{MSE(x,\hat{x})}{2\gamma_x^2} + \log(\gamma_x)\right]
 \end{equation*}
 
 Un lecteur avisé se demandera, à juste titre, où est passée la dépendance en y dans ce terme. Ce terme en réalité se cache dans la loi du décodeur où nous avons en réalité :
@@ -254,7 +267,17 @@ Un lecteur avisé se demandera, à juste titre, où est passée la dépendance e
 \end{equation}
 Le décodeur prend également y en entrée pour estimer x.
 
-\subsection{Distance au priors}
+\subsubsection{Espérances}
+Nous remarquerons que nous avons encore deux espérances dans les attaches aux données dont nous ne pouvons nous défaire. La solution ici étant de passer par une approximation de Monte-Carlo, soit, d'exprimer :
+
+\begin{equation*}
+    \mathcal{L}_x \propto -\frac{N_x}{N_b}*\sum_{i=1}^{N_b}\frac{MSE(x,\hat{x}[z_i])}{2\gamma_x^2} - N_x*\log(\gamma_x)
+\end{equation*}
+
+
+
+
+\subsection{Distance au priors}\label{srkl}
 
 De ce qu'il reste de non analysé dans l'ELBO, nous pouvons extraire plusieurs termes, qui sont, nous le verrons, des distances.
 Ainsi, nous pouvons extraire les deux distances suivantes 
@@ -301,9 +324,112 @@ La négative ELBO (que l'on minimisera) s'exprime alors de façon très simple :
 \end{multline}
 
 \subsection{Modèle plus complexe}
-Plusieurs simplifications ont été faites dans le modèle précédent. Certaines sont judicieuses, d'autres, peut-être moins. Dans un cadre de super-résolution ou résolution d'un problème conditionnel, il est judicieux de supprimer la dépendance en x pour l'étage y quand nous voulons inférer x sachant y. C'est notre cas ici. Il peut notamment être intéressant de réinclure la dépendance en $u$ pour la reconstruction de $x$ de cette façon, nous pourrions propager les gradients de MSE dans les blocs de réseaux neuronaux qui s'occupent de la tâche de super-résolution. Cela devrait nous aider à améliorer les performances de la tâche en amont. L'implémentation est un problème d'architecture que nous n'étudierons pas ici.
+Plusieurs simplifications ont été faites dans le modèle précédent. Certaines sont judicieuses, d'autres, peut-être moins. 
+
+Dans un cadre de super-résolution ou résolution d'un problème conditionnel, il est judicieux de supprimer la dépendance en x pour l'étage y quand nous voulons inférer x sachant y. C'est notre cas ici. Il peut notamment être intéressant de réinclure la dépendance en $u$ pour la reconstruction de $x$ de cette façon, nous pourrions propager les gradients de MSE dans les blocs de réseaux neuronaux qui s'occupent de la tâche de super-résolution. Cela devrait nous aider à améliorer les performances de la tâche en amont. L'implémentation est un problème d'architecture que nous n'étudierons pas ici.
 
 Il peut également être intéressant d'étudier le rajout des dépendances en $y,u$ dans z.
+\newpage
+\section{Dé-simplifications}
+\subsection{Présentation des dé-simplifications}
+
+Dans la partie \ref{srvae}, nous nous sommes demandé ce qu'il se passerait si nous réintroduisions certaines dépendances ignorées dans le modèle d'origine.
+Notamment, le graphe de dépendance deviendrait donc :
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=0.5\linewidth]{img/SRVAE_deps_all.drawio.png}
+    \caption{Modèle plus complexe}
+    \label{fig:depscomplexe}
+\end{figure}
+
+Par rapport à la section précédente, nous reprenons donc la loi jointe :
+\begin{equation*}
+    p(x,w) = p(x|y,u,z)p(z|y,u)p(y|u)p(u)
+\end{equation*}
+Nous ne modifions pas cette loi jointe, cette fois.
+
+La loi conditionnelle $q(w|x)$, par contre est modifiée :
+\begin{equation}
+     q(w|x) = q(z|y,x,u)q(u|x,y)q(y|x)
+\end{equation}
+
+Nous allons garder ici la dépendance en $y,u$ dans $z$ mais bien enlever $x$ dans $u$.
+La justification est que si nous gardions cette dépendance en $x$, nos dépendances deviendrait cycliques, nous aurions besoin de $x$ pour sampler $u$ qui permettrait alors de sampler $z$ pour retrouver ... $x$. 
+
+Nous avons donc 
+\begin{equation}
+     q(w|x) \approx q(z|y,x,u)q(u|y)q(y|x)
+\end{equation}
+\subsection{Évidence modifiée}
+
+Nous allons développer les calculs en réutilisant une grande majorité de la partie \ref{srvae}
+En reprenant l'expression de l'évidence vue plus tôt, nous obtenons :
+
+\begin{equation*}
+    p(x) = \mathbb{E}_{q(z|x,y,u)q(u|y)q(y|x)}\left[\frac{p(x|u,z,y)p(z|y,u)p(y|u)p(u)}{q(z|x,y,u)q(u|y)q(y|x)}\right]
+\end{equation*}
+
+L'inégalité de Jensen permet de développer les termes suivants :
+\begin{multline}
+    \log(p(x)) \geq \mathbb{E}_{q(z|y,x,u)q(u|y)q(y|x)}\left[\log(p(x|y,z,u))\right] + \mathbb{E}_{q(z|u,y,x)q(u|y)}\left[\log(p(z|y,u))\right] \\+ \mathbb{E}_{q(u|y)}\left[\log(p(y|u))\right] + \mathbb{E}_{q(u|y)}\left[\log(p(u))\right] - \mathbb{E}_{q(z|x,y,u)q(u|y)q(y|x)}\left[\log(q(z|y,x,u))\right]\\ - \mathbb{E}_{q(u|y)}\left[\log(q(u|y))\right]
+\end{multline}
+
+En utilisant les différentes parties vues précédemment, (\ref{attdata} et \ref{kl}), nous développons les termes suivants séparément : 
+
+\subsection{Attaches}
+L'attache à y, n'est pas modifiée, nous conservons alors :
+\begin{equation*}
+    \mathcal{L}_y \propto -\frac{N_y}{N_b}*\sum_{i=1}^{N_b}\frac{MSE(y,\hat{y}[z_i])}{2\gamma_y^2} - N_y*\log(\gamma_y)
+\end{equation*}
+\subsubsection{Attache à x}
+L'attache à x cependant est modifiée, car nous introduisons une dépendance en y,u dans le terme $ \mathcal{L}_x$.
+\begin{equation*}
+     \mathcal{L}_x = \mathbb{E}_{q(z|y,x,u)q(u|y)q(y|u)}\left[\log(p(x|y,z,u))\right]
+\end{equation*}
+
+Dans le cas d'un décodeur Gaussien, nous gardons une structure similaire à plus tôt, avec 
+\begin{equation*}
+        \mathcal{L}_x \propto -\frac{N_x}{N_b}*\sum_{i=1}^{N_b}\frac{MSE(x_i,\hat{x}_i[z_i,u_i,y_i])}{2\gamma_x^2} - N_x*\log(\gamma_x)
+\end{equation*}
+
+Avec la loi de $\hat{x}$ modifiée comme suit :
+\begin{equation*}
+    x \sim \mathcal{N}(\mu_\eta, \gamma^2_x\mathbb{I} |y, z, u)
+\end{equation*}
+
+\subsection{Priors}
+
+\subsubsection{Prior Gaussien}
+Nous reprenons les calculs développés dans la partie \ref{srkl}
+\begin{equation*}
+    D_u = - \int q(u|y) \log\left(\frac{q(u|y)}{p(u)}\right) = - \mathcal{KL}(q(u|y)||p(u)) 
+\end{equation*}
+
+\subsubsection{Prior Conditionnel}
+Ce prior qui était de la forme :
+\begin{equation*}
+    D_z = - \mathcal{KL}(q(z|x)||p(z|y,u))
+\end{equation*}
+
+Devient donc, en ajoutant les dépendances :
+\begin{equation*}
+    D_z = \mathbb{E}_{q(z|u,y,x)q(u|y)q(y|x)}\left[\log(p(z|y,u))\right] - \mathbb{E}_{q(z|x,y,u)q(u|y)q(y|x)}\left[\log(q(z|y,x,u))\right]
+\end{equation*}
+
+Nous pouvons utiliser la formule de l'espérance conditionnelle une nouvelle fois pour pouvoir développer ce calcul
+
+\begin{equation*}
+    D_z = - \mathbb{E}_{q(z|u,y,x)q(u|y)q(y|x)}\left[\log\left(\frac{q(z|y,x,u)}{p(z|y,u)}\right)\right]
+\end{equation*}
+
+\begin{equation*}
+    D_z = - \mathbb{E}_{q(u|y)q(y|x)}\int q(z|u,y,x)\log\left(\frac{q(z|y,x,u)}{p(z|y,u)}\right) dz
+\end{equation*}
+
+\begin{equation}
+    D_z = - \mathcal{KL}(q(z|x,u,y)||p(z|y,u))
+\end{equation}
+
 
 \section{MoG}
 
@@ -314,7 +440,11 @@ Admettons maintenant un mélange de gaussiennes :
 
 Nous ne changeons qu'une chose : le prior de u.
 Qu'est ce que cela traduit pour l'ELBO ? 
-Nous pouvons borner $\mathcal{KL}(p||\sum_i w_i q_i) \leq \sum_i w_i \mathcal{KL}(p||q_i)$. Ainsi, nous avons donc une borne inf de l'ELBO qui est une borne inf de $p(x)$.
+\cite{hershey2007Approximating} montre que nous pouvons borner 
+ \begin{equation*}
+  \mathcal{KL}(p||\sum_i w_i q_i) \leq \sum_i w_i \mathcal{KL}(p||q_i)   
+ \end{equation*}
+ Ainsi, nous avons donc une borne inf de l'ELBO qui est une borne inf de $p(x)$.
 
 Notre ELBO deviendrait alors :
 \begin{multline}
@@ -323,5 +453,6 @@ Notre ELBO deviendrait alors :
 
 Avec $p_i(u) \sim \mathcal{N}(\mu_i,\sigma_i^2)$.
 
-\end{document}
+\printbibliography
 
+\end{document}
